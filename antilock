@@ -1,0 +1,135 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local StarterGui = game:GetService("StarterGui")
+local LocalPlayer = Players.LocalPlayer
+
+-- Biến trạng thái
+local AntiLockEnabled = false
+local Gui = nil
+local Ping = 150 -- Giả định ping, có thể thay đổi theo hệ thống
+local JitterStrength = 0.5 -- Độ mạnh của chuyển động ngẫu nhiên (stud)
+local JitterFrequency = 0.1 -- Tần suất thay đổi vị trí (giây)
+local VerticalMode = "Random" -- "Down" (xuống đất), "Up" (lên trời), "Random" (ngẫu nhiên)
+local VerticalOffset = 5 -- Độ cao/thấp của hitbox (stud), ví dụ: 5 stud lên trời hoặc xuống đất
+
+-- Tạo GUI
+local function CreateGUI()
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Parent = game.CoreGui
+    ScreenGui.Name = "DNKAntiLock"
+
+    local Frame = Instance.new("Frame")
+    Frame.Size = UDim2.new(0, 150, 0, 100)
+    Frame.Position = UDim2.new(0.5, -75, 0.5, -50)
+    Frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    Frame.BackgroundTransparency = 0.5
+    Frame.Parent = ScreenGui
+    Frame.Active = true
+    Frame.Draggable = true
+
+    local Title = Instance.new("TextLabel")
+    Title.Size = UDim2.new(1, 0, 0, 30)
+    Title.Position = UDim2.new(0, 0, 0, 0)
+    Title.BackgroundTransparency = 1
+    Title.Text = "DNK AntiLock"
+    Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Title.TextScaled = true
+    Title.Font = Enum.Font.SourceSansBold
+    Title.Parent = Frame
+
+    local ToggleButton = Instance.new("TextButton")
+    ToggleButton.Size = UDim2.new(0.8, 0, 0, 40)
+    ToggleButton.Position = UDim2.new(0.1, 0, 0.5, 0)
+    ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    ToggleButton.Text = "OFF"
+    ToggleButton.TextColor3 = Color3.fromRGB(255, 0, 0)
+    ToggleButton.TextScaled = true
+    ToggleButton.Font = Enum.Font.SourceSans
+    ToggleButton.Parent = Frame
+
+    -- Hiệu ứng đổi màu cho tiêu đề
+    local function ChangeTitleColor()
+        while true do
+            local tweenInfo = TweenInfo.new(1, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut)
+            local colors = {
+                Color3.fromRGB(255, 0, 0),
+                Color3.fromRGB(0, 255, 0),
+                Color3.fromRGB(0, 0, 255),
+                Color3.fromRGB(255, 255, 0)
+            }
+            for _, color in ipairs(colors) do
+                TweenService:Create(Title, tweenInfo, {TextColor3 = color}):Play()
+                wait(1)
+            end
+        end
+    end
+    spawn(ChangeTitleColor)
+
+    -- Xử lý nút bật/tắt
+    ToggleButton.MouseButton1Click:Connect(function()
+        AntiLockEnabled = not AntiLockEnabled
+        ToggleButton.Text = AntiLockEnabled and "ON" or "OFF"
+        ToggleButton.TextColor3 = AntiLockEnabled and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+    end)
+
+    Gui = ScreenGui
+end
+
+-- Cơ chế antilock: Di chuyển ngẫu nhiên + thay đổi hitbox
+local function ApplyAntiLock()
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") or 
+       not LocalPlayer.Character:FindFirstChild("Humanoid") or LocalPlayer.Character.Humanoid.Health <= 0 then
+        return
+    end
+
+    local humanoidRootPart = LocalPlayer.Character.HumanoidRootPart
+    local humanoid = LocalPlayer.Character.Humanoid
+    local baseCFrame = humanoidRootPart.CFrame
+
+    -- Tính tần suất dựa trên ping
+    local adjustedFrequency = JitterFrequency * (Ping > 150 and 0.8 or 1) -- Giảm tần suất nếu ping cao
+
+    -- Xác định offset theo trục Y (lên trời hoặc xuống đất)
+    local function GetVerticalOffset()
+        if VerticalMode == "Down" then
+            return -VerticalOffset
+        elseif VerticalMode == "Up" then
+            return VerticalOffset
+        else -- Random
+            return math.random(-VerticalOffset, VerticalOffset)
+        end
+    end
+
+    -- Tạo chuyển động ngẫu nhiên
+    while AntiLockEnabled do
+        local offsetX = math.random(-JitterStrength, JitterStrength)
+        local offsetY = GetVerticalOffset() -- Thay đổi hitbox theo trục Y
+        local offsetZ = math.random(-JitterStrength, JitterStrength)
+
+        -- Áp dụng chuyển động bằng cách thay đổi CFrame
+        local newCFrame = baseCFrame + Vector3.new(offsetX, offsetY, offsetZ)
+        humanoidRootPart.CFrame = newCFrame
+
+        -- Đợi theo tần suất
+        wait(adjustedFrequency)
+    end
+end
+
+-- Kích hoạt antilock khi bật
+RunService.Heartbeat:Connect(function()
+    if AntiLockEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") and 
+       LocalPlayer.Character.Humanoid.Health > 0 then
+        spawn(ApplyAntiLock)
+    end
+end)
+
+-- Khởi tạo GUI
+CreateGUI()
+
+-- Thông báo khởi động
+StarterGui:SetCore("SendNotification", {
+    Title = "DNK AntiLock",
+    Text = "AntiLock Loaded! Use the GUI to toggle.",
+    Duration = 5
+})
